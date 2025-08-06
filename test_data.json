@@ -1,0 +1,10 @@
+[
+  {
+    "prompt": "Sensor reading: Temp=85\u00b0C, Vibration=0.8g\n\nWhat is the maintenance risk?",
+    "response": "High \u2013 Potential bearing failure. Schedule inspection immediately."
+  },
+  {
+    "prompt": "Sensor: Temp=60\u00b0C, Vibration=0.2g\n\nRisk level?",
+    "response": "Low \u2013 Normal operation. No immediate maintenance required."
+  }
+]

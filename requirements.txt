@@ -1,0 +1,9 @@
+
+torch
+transformers
+peft
+accelerate
+bitsandbytes
+fastapi
+uvicorn
+streamlit

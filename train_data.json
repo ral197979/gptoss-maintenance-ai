@@ -1,0 +1,18 @@
+[
+  {
+    "prompt": "Sensor reading: Temp=85\u00b0C, Vibration=0.8g\n\nWhat is the maintenance risk?",
+    "response": "High \u2013 Potential bearing failure. Schedule inspection immediately."
+  },
+  {
+    "prompt": "Sensor: Temp=60\u00b0C, Vibration=0.2g\n\nRisk level?",
+    "response": "Low \u2013 Normal operation. No immediate maintenance required."
+  },
+  {
+    "prompt": "Sensor: Temp=95\u00b0C, Vibration=1.5g\n\nSuggest action.",
+    "response": "Critical \u2013 Shutdown recommended to prevent catastrophic failure."
+  },
+  {
+    "prompt": "Sensor report: Temp=75\u00b0C, Vibration=0.6g, RPM=1400\n\nExpected issue?",
+    "response": "Moderate \u2013 Possible misalignment. Schedule maintenance within 24 hours."
+  }
+]
