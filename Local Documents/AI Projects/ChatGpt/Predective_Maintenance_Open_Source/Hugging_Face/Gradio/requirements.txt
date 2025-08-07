@@ -1,5 +1,5 @@
-transformers
-accelerate
-torch
-bitsandbytes
-peft
+scikit-learn
+pandas
+numpy
+gradio
+tensorflow
