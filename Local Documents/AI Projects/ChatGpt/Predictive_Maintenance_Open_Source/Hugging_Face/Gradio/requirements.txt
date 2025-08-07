@@ -1,0 +1,14 @@
+transformers
+accelerate
+torch
+bitsandbytes
+peft
+gradio
+scikit-learn
+pandas
+matplotlib
+tensorflow
+pandas
+numpy
+gradio
+seaborn
