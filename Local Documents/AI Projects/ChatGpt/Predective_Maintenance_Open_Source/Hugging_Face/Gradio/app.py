@@ -2,114 +2,66 @@ import gradio as gr
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.preprocessing import MinMaxScaler
-import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
+from tensorflow.keras.preprocessing.sequence import TimeseriesGenerator
 
-# ---------- Data Loading ----------
-def load_data():
-    # Only using FD001 for demo
-    train_df = pd.read_csv("train_FD001.txt", sep=" ", header=None)
-    test_df = pd.read_csv("test_FD001.txt", sep=" ", header=None)
-    rul_df = pd.read_csv("RUL_FD001.txt", sep=" ", header=None)
-    
-    # Drop empty columns at the end
-    train_df.drop(train_df.columns[[26, 27]], axis=1, inplace=True)
-    test_df.drop(test_df.columns[[26, 27]], axis=1, inplace=True)
-    
-    # Assign column names
-    cols = ['unit', 'cycle'] + [f'op_setting{i}' for i in range(1,4)] + [f'sensor{i}' for i in range(1,22)]
-    train_df.columns = test_df.columns = cols
+# -----------------------------
+# Random Forest Model Training
+# -----------------------------
+def train_random_forest(X_train, y_train):
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+    return model
 
-    return train_df, test_df, rul_df
-
-# ---------- Feature Scaling ----------
-def scale_data(train_df, test_df):
-    scaler = MinMaxScaler()
-    feature_cols = train_df.columns[2:]  # exclude unit and cycle
-
-    train_df[feature_cols] = scaler.fit_transform(train_df[feature_cols])
-    test_df[feature_cols] = scaler.transform(test_df[feature_cols])
-    return train_df, test_df
-
-# ---------- RUL Labels ----------
-def add_rul(train_df, test_df, rul_df):
-    max_cycles = train_df.groupby('unit')['cycle'].max().reset_index()
-    max_cycles.columns = ['unit', 'max_cycle']
-    train_df = train_df.merge(max_cycles, on='unit')
-    train_df['RUL'] = train_df['max_cycle'] - train_df['cycle']
-    train_df.drop('max_cycle', axis=1, inplace=True)
-
-    # For test
-    test_rul = test_df.groupby('unit')['cycle'].max().reset_index()
-    test_rul.columns = ['unit', 'last_cycle']
-    test_rul['RUL'] = rul_df[0]
-    test_df = test_df.merge(test_rul, on='unit')
-    test_df['RUL'] = test_df['RUL'] + test_df['last_cycle'] - test_df['cycle']
-    test_df.drop('last_cycle', axis=1, inplace=True)
-    return train_df, test_df
-
-# ---------- LSTM Model ----------
-def build_lstm_model(input_shape):
+# -----------------------------
+# LSTM Model Training
+# -----------------------------
+def train_lstm(X_train, y_train):
+    X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
     model = Sequential()
-    model.add(LSTM(100, input_shape=input_shape))
+    model.add(LSTM(50, activation='relu', input_shape=(X_train.shape[1], 1)))
     model.add(Dense(1))
-    model.compile(loss='mse', optimizer='adam')
+    model.compile(optimizer='adam', loss='mse')
+    model.fit(X_train, y_train, epochs=10, verbose=0)
     return model
 
-def prepare_lstm_data(df, sequence_length=30):
-    data = []
-    labels = []
-    feature_cols = df.columns[2:-1]  # exclude unit, cycle, and RUL
-    for engine_id in df['unit'].unique():
-        engine_data = df[df['unit'] == engine_id]
-        for i in range(len(engine_data) - sequence_length):
-            seq = engine_data.iloc[i:i+sequence_length][feature_cols].values
-            label = engine_data.iloc[i+sequence_length]['RUL']
-            data.append(seq)
-            labels.append(label)
-    return np.array(data), np.array(labels)
-
-# ---------- Random Forest ----------
-def train_random_forest(train_df):
-    X = train_df.drop(['unit', 'cycle', 'RUL'], axis=1)
-    y = train_df['RUL']
-    model = RandomForestRegressor(n_estimators=100)
-    model.fit(X, y)
-    return model
-
-# ---------- Prediction ----------
-def predict_rul(model_type):
-    train_df, test_df, rul_df = load_data()
-    train_df, test_df = scale_data(train_df, test_df)
-    train_df, test_df = add_rul(train_df, test_df, rul_df)
+# -----------------------------
+# Predict Function
+# -----------------------------
+def predict(model_type, file):
+    df = pd.read_csv(file.name, sep=' ', header=None)
+    df.dropna(axis=1, inplace=True)
+    df.columns = [f"sensor_{i}" for i in range(1, df.shape[1]+1)]
+    
+    # Simple target for demo: Remaining Useful Life = reverse index
+    df['RUL'] = df.index[::-1]
+    X = df.drop(columns=['RUL'])
+    y = df['RUL']
 
     if model_type == "RandomForest":
-        model = train_random_forest(train_df)
-        latest_test = test_df.groupby("unit").last().reset_index()
-        X_test = latest_test.drop(['unit', 'cycle', 'RUL'], axis=1)
-        preds = model.predict(X_test)
+        model = train_random_forest(X, y)
+        prediction = model.predict([X.iloc[-1]])
     else:
-        sequence_length = 30
-        train_seq, train_labels = prepare_lstm_data(train_df, sequence_length)
-        lstm_model = build_lstm_model((sequence_length, train_seq.shape[2]))
-        lstm_model.fit(train_seq, train_labels, epochs=2, batch_size=64, verbose=0)
+        lstm_model = train_lstm(X.values, y.values)
+        X_last = X.values[-10:].reshape((1, 10, 1)) if X.shape[0] >= 10 else X.values.reshape((1, X.shape[0], 1))
+        prediction = lstm_model.predict(X_last)
 
-        test_seq, _ = prepare_lstm_data(test_df, sequence_length)
-        preds = lstm_model.predict(test_seq[:10]).flatten()  # predict on first 10 sequences for demo
+    return f"Predicted Remaining Useful Life: {prediction[0][0]:.2f}"
 
-    pred_df = pd.DataFrame({"Predicted RUL": preds})
-    return pred_df.head(10)
-
-# ---------- Gradio UI ----------
+# -----------------------------
+# Gradio Interface
+# -----------------------------
 demo = gr.Interface(
-    fn=predict_rul,
-    inputs=gr.Radio(["RandomForest", "LSTM"], label="Select Model"),
-    outputs=gr.Dataframe(label="Top 10 RUL Predictions"),
-    title="NASA C-MAPSS Predictive Maintenance",
-    description="Select a model to predict Remaining Useful Life (RUL) using FD001 dataset."
+    fn=predict,
+    inputs=[
+        gr.Radio(["RandomForest", "LSTM"], label="Select Model Type"),
+        gr.File(label="Upload CMAPSS .txt file")
+    ],
+    outputs=gr.Textbox(label="Prediction Result"),
+    title="🛠️ Predictive Maintenance with NASA C-MAPSS",
+    description="Upload a CMAPSS dataset file to predict the Remaining Useful Life (RUL) of an engine."
 )
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     demo.launch()
